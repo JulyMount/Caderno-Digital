@@ -1,0 +1,342 @@
+import { create } from 'zustand';
+import { db } from '../firebase';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+
+const INITIAL_DATA = [];
+
+const reorderArray = (list, startIndex, endIndex) => {
+  const result = Array.from(list);
+  const [removed] = result.splice(startIndex, 1);
+  result.splice(endIndex, 0, removed);
+  return result;
+};
+
+let unsubscribeFirestore = null;
+
+export const useNotebookStore = create((set, get) => {
+  // Inicialmente, tenta carregar os dados do visitante (guest)
+  const savedGuestCourses = localStorage.getItem('user_notebook_courses_guest');
+  const initialCourses = savedGuestCourses ? JSON.parse(savedGuestCourses) : INITIAL_DATA;
+
+  // Função auxiliar para salvar no Storage correto e no Firebase
+  const persistState = (newCourses) => {
+    const user = get().user;
+    
+    // Salva no navegador usando o email como chave (ou 'guest' se não estiver logado)
+    const storageKey = user && user.email ? `user_notebook_courses_${user.email}` : 'user_notebook_courses_guest';
+    localStorage.setItem(storageKey, JSON.stringify(newCourses));
+    
+    // Salva no Firebase apenas se estiver logado
+    if (user && user.email) {
+      const userDocRef = doc(db, 'users', user.email, 'data', 'notebook');
+      setDoc(userDocRef, { courses: newCourses }, { merge: true }).catch(err => {
+        console.error("Erro ao sincronizar com Firebase:", err);
+      });
+    }
+  };
+
+  return {
+    user: null,
+    courses: initialCourses,
+    selectedCourseId: null,
+    selectedSemesterId: null,
+    selectedSubjectId: null,
+    selectedLessonId: null,
+
+    setUser: (user) => {
+      // Remove ouvinte do usuário anterior
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = null;
+      }
+
+      // Limpa as seleções da tela
+      set({ user, selectedCourseId: null, selectedSemesterId: null, selectedSubjectId: null, selectedLessonId: null });
+
+      if (user && user.email) {
+        // Tenta carregar os dados do navegador ESPECÍFICOS deste usuário para aparecer rápido na tela
+        const localCache = localStorage.getItem(`user_notebook_courses_${user.email}`);
+        if (localCache) {
+          set({ courses: JSON.parse(localCache) });
+        }
+
+        // Conecta no Firebase daquele usuário específico
+        const userDocRef = doc(db, 'users', user.email, 'data', 'notebook');
+        unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.courses) {
+              set({ courses: data.courses });
+              localStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(data.courses));
+            }
+          } else {
+            // É UMA CONTA NOVA! Cria um caderno novinho para ela (usando o INITIAL_DATA)
+            setDoc(userDocRef, { courses: INITIAL_DATA });
+            set({ courses: INITIAL_DATA });
+            localStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(INITIAL_DATA));
+          }
+        }, (error) => {
+          console.error("Erro no ouvinte do Firestore:", error);
+        });
+      } else {
+        // SE FEZ LOGOUT: Volta para a tela de visitante sem misturar os dados
+        const guestCache = localStorage.getItem('user_notebook_courses_guest');
+        set({ courses: guestCache ? JSON.parse(guestCache) : INITIAL_DATA });
+      }
+    },
+
+    setSelectedCourseId: (id) => set({ selectedCourseId: id, selectedSemesterId: null, selectedSubjectId: null, selectedLessonId: null }),
+    setSelectedSemesterId: (id) => set({ selectedSemesterId: id, selectedSubjectId: null, selectedLessonId: null }),
+    setSelectedSubjectId: (id) => set({ selectedSubjectId: id, selectedLessonId: null }),
+    setSelectedLessonId: (id) => set({ selectedLessonId: id }),
+
+    // Os métodos de CRUD continuam iguais, pois todos usam persistState(updated)
+    addCourse: (name, iconKey = 'GraduationCap', color = 'from-blue-600 to-indigo-700') => {
+      const newCourse = { id: Date.now().toString(), name, iconKey, color, semesters: [] };
+      const updated = [...get().courses, newCourse];
+      set({ courses: updated });
+      persistState(updated);
+    },
+    editCourse: (id, name, iconKey, color) => {
+      const updated = get().courses.map(c => c.id === id ? { ...c, name, iconKey: iconKey || c.iconKey, color: color || c.color } : c);
+      set({ courses: updated });
+      persistState(updated);
+    },
+    deleteCourse: (id) => {
+      const updated = get().courses.filter(c => c.id !== id);
+      set({ courses: updated, selectedCourseId: null });
+      persistState(updated);
+    },
+    reorderCourses: (fromIndex, toIndex) => {
+      const updated = reorderArray(get().courses, fromIndex, toIndex);
+      set({ courses: updated });
+      persistState(updated);
+    },
+
+    addSemester: (courseId, name) => {
+      const targetCourseId = courseId || get().selectedCourseId;
+      const newSem = { id: Date.now().toString(), name, subjects: [] };
+      const updated = get().courses.map(c => c.id === targetCourseId ? { ...c, semesters: [...c.semesters, newSem] } : c);
+      set({ courses: updated });
+      persistState(updated);
+    },
+    editSemester: (id, name) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => s.id === id ? { ...s, name } : s)
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    deleteSemester: (id) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.filter(s => s.id !== id)
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    reorderSemesters: (fromIndex, toIndex) => {
+      const { courses, selectedCourseId } = get();
+      const updated = courses.map(c => {
+        if (c.id === selectedCourseId) {
+          return { ...c, semesters: reorderArray(c.semesters, fromIndex, toIndex) };
+        }
+        return c;
+      });
+      set({ courses: updated });
+      persistState(updated);
+    },
+
+    addSubject: (semesterId, subjectData) => {
+      const newSub = { id: Date.now().toString(), chapters: [], ...subjectData };
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => s.id === semesterId ? { ...s, subjects: [...s.subjects, newSub] } : s)
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    editSubject: (subjectId, subjectData) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? { ...sub, ...subjectData } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    deleteSubject: (subjectId) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.filter(sub => sub.id !== subjectId)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    reorderSubjects: (semesterId, fromIndex, toIndex) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => {
+          if (s.id === semesterId) {
+            return { ...s, subjects: reorderArray(s.subjects, fromIndex, toIndex) };
+          }
+          return s;
+        })
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+
+    addChapter: (subjectId, title) => {
+      const newChap = { id: Date.now().toString(), title, lessons: [] };
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? { ...sub, chapters: [...sub.chapters, newChap] } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    editChapter: (subjectId, chapterId, title) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ch.id === chapterId ? { ...ch, title } : ch)
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    deleteChapter: (subjectId, chapterId) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.filter(ch => ch.id !== chapterId)
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    reorderChapters: (subjectId, fromIndex, toIndex) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => {
+            if (sub.id === subjectId) {
+              return { ...sub, chapters: reorderArray(sub.chapters, fromIndex, toIndex) };
+            }
+            return sub;
+          })
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+
+    addLesson: (subjectId, chapterId, title) => {
+      const newLesson = { id: Date.now().toString(), title, date: 'Hoje', content: '' };
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ch.id === chapterId ? {
+              ...ch,
+              lessons: [...ch.lessons, newLesson]
+            } : ch)
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    editLesson: (subjectId, lessonId, title) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ({
+              ...ch,
+              lessons: ch.lessons.map(l => l.id === lessonId ? { ...l, title } : l)
+            }))
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    deleteLesson: (subjectId, lessonId) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ({
+              ...ch,
+              lessons: ch.lessons.filter(l => l.id !== lessonId)
+            }))
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    reorderLessons: (subjectId, chapterId, fromIndex, toIndex) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => {
+              if (ch.id === chapterId) {
+                return { ...ch, lessons: reorderArray(ch.lessons, fromIndex, toIndex) };
+              }
+              return ch;
+            })
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    },
+    saveLessonContent: (subjectId, lessonId, content) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ({
+              ...ch,
+              lessons: ch.lessons.map(l => l.id === lessonId ? { ...l, content } : l)
+            }))
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
+    }
+  };
+});
