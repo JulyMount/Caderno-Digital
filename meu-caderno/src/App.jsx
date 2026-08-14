@@ -4,12 +4,13 @@ import confetti from 'canvas-confetti';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import html2pdf from 'html2pdf.js';
-
+import { generateSummary, generateFlashcards, improveFormatting } from './services/gemini';
 import { 
-  BookOpen, Plus, FileText, ArrowLeft, 
+  BookOpen, Plus, FileText, ArrowLeft,
   Pill, Activity, Stethoscope, Baby, Microscope, LogIn, LogOut, GraduationCap, Calendar,
   Brain, Heart, Eye, Bone, Dna, Thermometer, Syringe, FlaskConical, Calculator, Languages, Laptop,
-  X, MoreVertical, Edit3, Trash2, Search, Download, GripVertical, Filter, User
+  X, MoreVertical, Edit3, Trash2, Search, Download, GripVertical, Filter, User,
+  Sparkles, HelpCircle, CheckCircle
 } from 'lucide-react';
 
 import { useNotebookStore } from './store/useNotebookStore';
@@ -17,6 +18,8 @@ import LessonEditor from './Editor';
 
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
+
+import FlashcardModal from './FlashcardModal';
 
 // 🔑 GOOGLE CLIENT ID
 const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
@@ -38,6 +41,68 @@ const COLOR_OPTIONS = [
 ];
 
 export default function App() {
+  // Estado para controlar o carregamento da IA
+const [isAiLoading, setIsAiLoading] = useState(false);
+
+// Função para pegar todo o texto da aula atual no editor
+const getEditorText = () => {
+  const editorEl = document.querySelector('.bn-editor') || document.querySelector('.blocknote-editor');
+  return editorEl ? editorEl.innerText : '';
+};
+
+// 1. Gerar Resumo
+const handleGenerateSummary = async () => {
+  const text = getEditorText();
+  if (!text || text.trim().length < 20) {
+    toast.warning("Escreva pelo menos algumas frases na aula para a IA resumir!");
+    return;
+  }
+
+  const toastId = toast.loading("Gemini está analisando e resumindo sua aula...");
+  setIsAiLoading(true);
+
+  try {
+    const summary = await generateSummary(text);
+    toast.success("Resumo gerado com sucesso!", { id: toastId });
+    
+    // Exemplo: exibe o resumo em um alerta ou insere no final
+    alert(`📌 RESUMO DA IA:\n\n${summary}`);
+  } catch (err) {
+    toast.error("Erro ao conectar com a IA. Verifique sua API Key.", { id: toastId });
+  } finally {
+    setIsAiLoading(false);
+  }
+};
+
+const [flashcards, setFlashcards] = useState([]);
+const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+
+// 2. Gerar Flashcards
+const handleGenerateFlashcards = async () => {
+  const text = getEditorText();
+  if (!text || text.trim().length < 20) {
+    toast.warning("Escreva mais conteúdo na aula para criar perguntas de estudo!");
+    return;
+  }
+
+  const toastId = toast.loading("Gemini está criando perguntas de fixação...");
+  setIsAiLoading(true);
+
+  try {
+    const cards = await generateFlashcards(text);
+    toast.success(`${cards.length} Flashcards gerados!`, { id: toastId });
+
+    // Salva os cartões e abre o modal interativo
+    setFlashcards(cards);
+    setIsFlashcardModalOpen(true);
+  } catch (err) {
+    toast.error("Erro ao gerar flashcards.", { id: toastId });
+  } finally {
+    setIsAiLoading(false);
+  }
+};
+
+
   // Adicione o isAuthReady junto com seus outros estados
   const [isAuthReady, setIsAuthReady] = useState(false);
 
@@ -367,6 +432,32 @@ export default function App() {
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" /> Exportar PDF
+                  </button>
+                </div>
+
+                {/* Barra de Ferramentas com Inteligência Artificial */}
+                <div className="flex items-center gap-2 mb-4 p-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 rounded-xl shadow-sm">
+                  <div className="flex items-center gap-1 text-purple-700 font-semibold text-xs px-2">
+                    <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />
+                    <span>Assistente IA:</span>
+                  </div>
+
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={isAiLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Gerar Resumo
+                  </button>
+
+                  <button
+                    onClick={handleGenerateFlashcards}
+                    disabled={isAiLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    Gerar Flashcards
                   </button>
                 </div>
 
@@ -1255,6 +1346,12 @@ export default function App() {
             )}
           </>
         )}
+        {/* 🟢 COLE O MODAL AQUI */}
+      <FlashcardModal 
+        isOpen={isFlashcardModalOpen} 
+        onClose={() => setIsFlashcardModalOpen(false)} 
+        flashcards={flashcards} 
+      />
       </div>
     </GoogleOAuthProvider>
   );
