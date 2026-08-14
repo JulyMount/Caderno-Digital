@@ -13,6 +13,9 @@ export default defineConfig({
         enabled: true // <-- ESTA LINHA ATIVA O MANIFEST NO NMP RUN DEV
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // Aumenta o limite para 5 MB
+      },
       manifest: {
         name: 'Meu Caderno Digital',
         short_name: 'Meu Caderno',
