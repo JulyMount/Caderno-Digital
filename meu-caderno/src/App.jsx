@@ -14,6 +14,9 @@ import {
 import { useNotebookStore } from './store/useNotebookStore';
 import LessonEditor from './Editor';
 
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
+
 // 🔑 GOOGLE CLIENT ID
 const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
@@ -34,6 +37,9 @@ const COLOR_OPTIONS = [
 ];
 
 export default function App() {
+  // Adicione o isAuthReady junto com seus outros estados
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
   const {
     user, setUser, courses, selectedCourseId, selectedSemesterId, selectedSubjectId, selectedLessonId,
     setSelectedCourseId, setSelectedSemesterId, setSelectedSubjectId, setSelectedLessonId,
@@ -43,6 +49,26 @@ export default function App() {
     addChapter, editChapter, deleteChapter, reorderChapters,
     addLesson, editLesson, deleteLesson, reorderLessons, saveLessonContent
   } = useNotebookStore();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        if (typeof setUser === 'function') {
+          setUser({
+            displayName: currentUser.displayName || currentUser.email || 'Usuário',
+            email: currentUser.email || '',
+            photoURL: currentUser.photoURL || '',
+            uid: currentUser.uid
+          });
+        }
+      } else {
+        if (typeof setUser === 'function') setUser(null);
+      }
+      setIsAuthReady(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilter, setSearchFilter] = useState('all');
@@ -198,10 +224,36 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handleClick = () => setContextMenu({ visible: false, x: 0, y: 0, type: null, item: null });
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
-  }, []);
+    const handlePopState = () => {
+      // Se o usuário estiver dentro de uma aula, volta para a matéria
+      if (selectedLessonId) {
+        setSelectedLessonId(null);
+      } 
+      // Se estiver na matéria, volta para os semestres
+      else if (selectedSubjectId) {
+        setSelectedSubjectId(null);
+      } 
+      // Se estiver no semestre, volta para os cursos
+      else if (selectedSemesterId) {
+        setSelectedSemesterId(null);
+      } 
+      // Se estiver nos cursos, volta para o início
+      else if (selectedCourseId) {
+        setSelectedCourseId(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selectedCourseId, selectedSemesterId, selectedSubjectId, selectedLessonId]);
+
+  if (!isAuthReady) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-gray-50">
+        <p className="text-gray-500 font-medium animate-pulse">Carregando seu caderno...</p>
+      </div>
+    );
+  }
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -383,6 +435,7 @@ export default function App() {
                                   setSelectedSubjectId(res.subjectId);
                                   if (res.lessonId) setSelectedLessonId(res.lessonId);
                                   setSearchQuery('');
+                                  window.history.pushState({ tela: 'interna' }, '');
                                 }}
                                 className="w-full text-left p-2.5 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer flex flex-col gap-0.5 mb-1"
                               >
@@ -400,15 +453,15 @@ export default function App() {
 
                     {/* AVATAR DO USUÁRIO LOGADO */}
                     <div className="flex items-center gap-2 bg-white p-1.5 pl-3 border border-slate-200 rounded-2xl shadow-sm shrink-0">
-                      {user.picture ? (
-                        <img src={user.picture} alt={user.name} className="w-7 h-7 rounded-full object-cover border border-slate-200" />
+                      {(user?.photoURL || user?.picture) ? (
+                        <img src={user.photoURL || user.picture} alt="Avatar" className="w-7 h-7 rounded-full object-cover border border-slate-200" />
                       ) : (
                         <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 font-bold flex items-center justify-center text-xs">
-                          {user.name.charAt(0)}
+                          {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
                         </div>
                       )}
                       <span className="text-xs font-bold text-slate-700 hidden sm:inline max-w-[100px] truncate">
-                        {user.name.split(' ')[0]}
+                        {(user?.displayName || user?.email || 'Usuário').split(' ')[0]}
                       </span>
                       <button 
                         onClick={() => { setUser(null); toast.info('Sessão encerrada.'); }}
@@ -495,7 +548,7 @@ export default function App() {
                             onDragStart={(e) => handleDragStart(e, index)}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleDrop(e, index, 'semester')}
-                            onClick={() => setSelectedSemesterId(sem.id)}
+                            onClick={() => {setSelectedSemesterId(sem.id);window.history.pushState({ tela: 'interna' }, '');}}
                             onContextMenu={(e) => handleContextMenu(e, 'semester', sem)}
                             className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between group relative"
                           >
@@ -526,6 +579,7 @@ export default function App() {
                             setEditingSemester(null);
                             setSemesterName('');
                             setIsSemesterModalOpen(true);
+                            window.history.pushState({ tela: 'interna' }, '');
                           }}
                           className="border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-200/20 hover:bg-indigo-50/20 rounded-2xl p-6 flex items-center justify-center gap-2 text-slate-500 hover:text-indigo-600 transition-all font-semibold text-sm cursor-pointer"
                         >
@@ -668,7 +722,7 @@ export default function App() {
                                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, lessIndex); }}
                                       onDragOver={(e) => e.preventDefault()}
                                       onDrop={(e) => { e.stopPropagation(); handleDrop(e, lessIndex, 'lesson', chapter.id); }}
-                                      onClick={() => setSelectedLessonId(lesson.id)}
+                                      onClick={() => setSelectedLessonId(lesson.id)}onClick={() => {setSelectedLessonId(lesson.id); window.history.pushState({ tela: 'interna' }, '');}}
                                       onContextMenu={(e) => handleContextMenu(e, 'lesson', lesson)}
                                       className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-indigo-50/70 text-slate-700 hover:text-indigo-900 transition-all text-sm group cursor-pointer border border-transparent hover:border-indigo-100"
                                     >
