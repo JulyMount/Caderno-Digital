@@ -722,7 +722,7 @@ export default function App() {
                                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, lessIndex); }}
                                       onDragOver={(e) => e.preventDefault()}
                                       onDrop={(e) => { e.stopPropagation(); handleDrop(e, lessIndex, 'lesson', chapter.id); }}
-                                      onClick={() => setSelectedLessonId(lesson.id)}onClick={() => {setSelectedLessonId(lesson.id); window.history.pushState({ tela: 'interna' }, '');}}
+                                      onClick={() => {setSelectedLessonId(lesson.id);window.history.pushState({ tela: 'interna' }, '');}}
                                       onContextMenu={(e) => handleContextMenu(e, 'lesson', lesson)}
                                       className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-indigo-50/70 text-slate-700 hover:text-indigo-900 transition-all text-sm group cursor-pointer border border-transparent hover:border-indigo-100"
                                     >
