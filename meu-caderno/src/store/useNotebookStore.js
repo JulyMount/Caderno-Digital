@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { dexieStorage } from "../db";
 
 const INITIAL_DATA = [];
 
@@ -13,19 +14,51 @@ const reorderArray = (list, startIndex, endIndex) => {
 
 let unsubscribeFirestore = null;
 
+// DEPOIS:
 export const useNotebookStore = create((set, get) => {
-  // Inicialmente, tenta carregar os dados do visitante (guest)
-  const savedGuestCourses = localStorage.getItem('user_notebook_courses_guest');
-  const initialCourses = savedGuestCourses ? JSON.parse(savedGuestCourses) : INITIAL_DATA;
+  // Inicializa o estado com INITIAL_DATA (ou array vazio) até a leitura assíncrona do Dexie terminar
+  const initialCourses = INITIAL_DATA;
 
-  // Função auxiliar para salvar no Storage correto e no Firebase
-  const persistState = (newCourses) => {
+  // Função para carregar os dados do Dexie logo que a aplicação inicia
+  const loadInitialData = async () => {
+    try {
+      const user = get()?.user;
+      const storageKey = user && user.email ? `user_notebook_courses_${user.email}` : 'user_notebook_courses_guest';
+      
+      const savedData = await dexieStorage.getItem(storageKey);
+      
+      // Se encontrou dados no Dexie, atualiza o estado
+      if (savedData) {
+        set({ courses: JSON.parse(savedData) });
+      } else {
+        // Migração suave: se não encontrou no Dexie mas tinha no localStorage antigo, resgata
+        const oldLocalStorage = localStorage.getItem(storageKey);
+        if (oldLocalStorage) {
+          const parsed = JSON.parse(oldLocalStorage);
+          set({ courses: parsed });
+          await dexieStorage.setItem(storageKey, oldLocalStorage); // Salva no Dexie
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados do Dexie:", err);
+    }
+  };
+
+  // Executa o carregamento assíncrono inicial
+  setTimeout(() => {
+    loadInitialData();
+  }, 0);
+
+  // Função auxiliar para salvar no Dexie (IndexedDB) e no Firebase
+  const persistState = async (newCourses) => {
     const user = get().user;
-    
+
     // Salva no navegador usando o email como chave (ou 'guest' se não estiver logado)
     const storageKey = user && user.email ? `user_notebook_courses_${user.email}` : 'user_notebook_courses_guest';
-    localStorage.setItem(storageKey, JSON.stringify(newCourses));
     
+    // Agora salva no Dexie (sem o limite de 5MB do localStorage!)
+    await dexieStorage.setItem(storageKey, JSON.stringify(newCourses));
+
     // Salva no Firebase apenas se estiver logado
     if (user && user.email) {
       const userDocRef = doc(db, 'users', user.email, 'data', 'notebook');

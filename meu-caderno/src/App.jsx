@@ -3,6 +3,7 @@ import { Toaster, toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
+import html2pdf from 'html2pdf.js';
 
 import { 
   BookOpen, Plus, FileText, ArrowLeft, 
@@ -255,6 +256,47 @@ export default function App() {
     );
   }
 
+  const handleExportPDF = async () => {
+  // Pega o contêiner do editor
+  const element = document.querySelector('.bn-editor') || 
+                  document.querySelector('.bn-container') || 
+                  document.querySelector('.blocknote-editor');
+
+  if (!element) {
+    toast.error("Conteúdo da aula não encontrado para exportar.");
+    return;
+  }
+
+  const toastId = toast.loading("Gerando PDF...");
+
+  // Busca o título exibido na tela (h1, h2 ou h3) para usar no nome do arquivo
+  const titleElement = document.querySelector('h1') || document.querySelector('h2') || document.querySelector('h3');
+  const lessonTitle = titleElement ? titleElement.innerText.replace(/[^a-zA-Z0-9 -]/g, "").trim() : 'Anotacao';
+
+  try {
+    const opt = {
+      margin:       [10, 10, 10, 10],
+      filename:     `Aula_${lessonTitle}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { 
+        scale: 2, 
+        useCORS: true,
+        logging: false,
+        windowWidth: element.scrollWidth || 800
+      },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    await html2pdf().set(opt).from(element).save();
+
+    toast.success("PDF gerado com sucesso!", { id: toastId });
+  } catch (err) {
+    console.error("Erro ao gerar PDF:", err);
+    toast.error("Erro ao processar PDF. Verifique o console.", { id: toastId });
+  }
+};
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="min-h-screen bg-slate-100 text-slate-800 font-sans p-4 md:p-8 relative">
@@ -321,7 +363,7 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={() => { window.print(); toast.success('Pronto para imprimir/salvar PDF!'); }}
+                    onClick={handleExportPDF}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" /> Exportar PDF
