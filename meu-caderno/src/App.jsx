@@ -21,6 +21,8 @@ import { auth } from './firebase';
 
 import FlashcardModal from './FlashcardModal';
 
+import SummaryModal from './SummaryModal';
+
 // 🔑 GOOGLE CLIENT ID
 const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
@@ -50,29 +52,50 @@ const getEditorText = () => {
   return editorEl ? editorEl.innerText : '';
 };
 
+const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+const [summaryResult, setSummaryResult] = useState('');
+
 // 1. Gerar Resumo
-const handleGenerateSummary = async () => {
-  const text = getEditorText();
-  if (!text || text.trim().length < 20) {
-    toast.warning("Escreva pelo menos algumas frases na aula para a IA resumir!");
-    return;
-  }
+// 1. Gerar Resumo com o Gemini
+  const handleGenerateSummary = async () => {
+    // Recupera o texto digitado na aula atual
+    const text = getEditorText ? getEditorText() : "";
 
-  const toastId = toast.loading("Gemini está analisando e resumindo sua aula...");
-  setIsAiLoading(true);
+    if (!text || text.trim().length === 0) {
+      toast.error("Sua aula está vazia! Escreva algo antes de gerar o resumo.");
+      return;
+    }
 
-  try {
-    const summary = await generateSummary(text);
-    toast.success("Resumo gerado com sucesso!", { id: toastId });
-    
-    // Exemplo: exibe o resumo em um alerta ou insere no final
-    alert(`📌 RESUMO DA IA:\n\n${summary}`);
-  } catch (err) {
-    toast.error("Erro ao conectar com a IA. Verifique sua API Key.", { id: toastId });
-  } finally {
-    setIsAiLoading(false);
-  }
-};
+    const toastId = toast.loading("Gemini está analisando e resumindo sua aula...");
+    setIsAiLoading(true);
+
+    try {
+      const summary = await generateSummary(text);
+      setSummaryResult(summary);
+      setIsSummaryOpen(true); // Abre o modal com o resumo formatado
+      toast.success("Resumo gerado com sucesso!", { id: toastId });
+    } catch (error) {
+      console.error("Erro ao gerar resumo:", error);
+      toast.error("Erro ao gerar resumo no Gemini.", { id: toastId });
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // 2. Inserir o Resumo no final da aula
+  const handleInsertSummaryToNote = (summary) => {
+    // Monta o cabeçalho e o conteúdo em Markdown
+    const formattedSummary = `---\n### 📝 Resumo da Aula (IA)\n${summary}`;
+
+    // Usa a API do BlockNote para inserir os blocos convertidos
+    if (typeof window.insertSummaryToEditor === 'function') {
+      window.insertSummaryToEditor(formattedSummary);
+      setIsSummaryOpen(false);
+      toast.success("Resumo inserido no final da aula!");
+    } else {
+      toast.error("O editor não está pronto para receber o texto.");
+    }
+  };
 
 const [flashcards, setFlashcards] = useState([]);
 const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
@@ -461,14 +484,15 @@ const handleGenerateFlashcards = async () => {
                   </button>
                 </div>
 
-                <LessonEditor 
+                <LessonEditor
+                  key={`${selectedLessonId}-${currentLesson?.content?.length}`}
                   lesson={currentLesson}
                   onSave={(id, content) => {
                     if (currentSubject) {
                       saveLessonContent(currentSubject.id, id, content);
+                      triggerConfetti();
+                      toast.success('Anotação salva com sucesso!');
                     }
-                    triggerConfetti();
-                    toast.success('Anotação salva com sucesso!');
                   }}
                   onBack={() => {
                     setConfirmDialog({
@@ -1351,6 +1375,12 @@ const handleGenerateFlashcards = async () => {
         isOpen={isFlashcardModalOpen} 
         onClose={() => setIsFlashcardModalOpen(false)} 
         flashcards={flashcards} 
+      />
+      <SummaryModal
+        isOpen={isSummaryOpen}
+        onClose={() => setIsSummaryOpen(false)}
+        summaryText={summaryResult}
+        onInsert={handleInsertSummaryToNote}
       />
       </div>
     </GoogleOAuthProvider>

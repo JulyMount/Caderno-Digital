@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -45,8 +45,28 @@ export default function LessonEditor({ lesson, onSave, onBack }) {
   // Inicializa o Editor Notion ativando a opção de upload de arquivos do PC
   const editor = useCreateBlockNote({
     initialContent: initialBlocks,
-    uploadFile: handleFileUpload // 👈 Esta linha habilita a aba de "Upload" para anexar imagens/arquivos
+    uploadFile: handleFileUpload
   });
+
+  // 👇 COLE A PARTIR DAQUI (Logo abaixo do editor) 👇
+  useEffect(() => {
+    window.insertSummaryToEditor = async (markdownText) => {
+      if (!editor) return;
+
+      try {
+        // Converte a string de Markdown em blocos reais do BlockNote
+        const blocks = await editor.tryParseMarkdownToBlocks(markdownText);
+        
+        // Pega o último bloco para inserir no final
+        const lastBlock = editor.document[editor.document.length - 1];
+        
+        // Insere os novos blocos formatados
+        editor.insertBlocks(blocks, lastBlock, 'after');
+      } catch (error) {
+        console.error("Erro ao converter Markdown para blocos no BlockNote:", error);
+      }
+    };
+  }, [editor]);
 
   const handleSave = () => {
     if (!editor) return;
