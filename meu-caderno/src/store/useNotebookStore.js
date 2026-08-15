@@ -370,6 +370,23 @@ export const useNotebookStore = create((set, get) => {
       }));
       set({ courses: updated });
       persistState(updated);
+    },
+    saveLessonAICache: (subjectId, lessonId, aiCacheData) => {
+      const updated = get().courses.map(c => ({
+        ...c,
+        semesters: c.semesters.map(s => ({
+          ...s,
+          subjects: s.subjects.map(sub => sub.id === subjectId ? {
+            ...sub,
+            chapters: sub.chapters.map(ch => ({
+              ...ch,
+              lessons: ch.lessons.map(l => l.id === lessonId ? { ...l, ...aiCacheData } : l)
+            }))
+          } : sub)
+        }))
+      }));
+      set({ courses: updated });
+      persistState(updated);
     }
   };
 });

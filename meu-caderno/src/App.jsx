@@ -58,27 +58,45 @@ const [summaryResult, setSummaryResult] = useState('');
 // 1. Gerar Resumo
 // 1. Gerar Resumo com o Gemini
   const handleGenerateSummary = async () => {
-    // Recupera o texto digitado na aula atual
-    const text = getEditorText ? getEditorText() : "";
+    const currentContent = getEditorText ? getEditorText() : "";
 
-    if (!text || text.trim().length === 0) {
-      toast.error("Sua aula está vazia! Escreva algo antes de gerar o resumo.");
+    if (!currentContent.trim()) {
+      toast.error("Escreva algo na aula antes de gerar um resumo.");
       return;
     }
 
-    const toastId = toast.loading("Gemini está analisando e resumindo sua aula...");
-    setIsAiLoading(true);
+    // ⚡ CHECAGEM DE CACHE:
+    if (
+      currentLesson?.cachedSummary && 
+      currentLesson?.lastSummarizedContent === currentContent
+    ) {
+      console.log("⚡ [CACHE] Resumo recuperado do banco sem gastar Gemini!");
+      setSummaryResult(currentLesson.cachedSummary);
+      setIsSummaryOpen(true);
+      toast.success("Resumo carregado instantaneamente!");
+      return;
+    }
 
+    // 🤖 Se não está no cache, chama o Gemini
     try {
-      const summary = await generateSummary(text);
-      setSummaryResult(summary);
-      setIsSummaryOpen(true); // Abre o modal com o resumo formatado
-      toast.success("Resumo gerado com sucesso!", { id: toastId });
+      toast.info("Gerando resumo com IA...");
+
+      const generatedSummary = await generateSummary(currentContent);
+
+      // 💾 Salva no Cache da aula
+      if (currentSubject?.id && selectedLessonId) {
+        saveLessonAICache(currentSubject.id, selectedLessonId, {
+          cachedSummary: generatedSummary,
+          lastSummarizedContent: currentContent
+        });
+      }
+
+      setSummaryText(generatedSummary);
+      setIsSummaryOpen(true);
+
     } catch (error) {
-      console.error("Erro ao gerar resumo:", error);
-      toast.error("Erro ao gerar resumo no Gemini.", { id: toastId });
-    } finally {
-      setIsAiLoading(false);
+      toast.error("Erro ao gerar resumo pela IA.");
+      console.error(error);
     }
   };
 
@@ -102,28 +120,47 @@ const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
 
 // 2. Gerar Flashcards
 const handleGenerateFlashcards = async () => {
-  const text = getEditorText();
-  if (!text || text.trim().length < 20) {
-    toast.warning("Escreva mais conteúdo na aula para criar perguntas de estudo!");
-    return;
-  }
+    const currentContent = getEditorText ? getEditorText() : "";
 
-  const toastId = toast.loading("Gemini está criando perguntas de fixação...");
-  setIsAiLoading(true);
+    if (!currentContent.trim()) {
+      toast.error("Escreva algo na aula antes de gerar os flashcards.");
+      return;
+    }
 
-  try {
-    const cards = await generateFlashcards(text);
-    toast.success(`${cards.length} Flashcards gerados!`, { id: toastId });
+    // ⚡ 1. CHECAGEM DE CACHE (Se já existe e o texto não mudou)
+    if (
+      currentLesson?.cachedFlashcards && 
+      currentLesson?.lastFlashcardContent === currentContent
+    ) {
+      console.log("⚡ [CACHE] Flashcards recuperados do banco sem gastar Gemini!");
+      setFlashcards(currentLesson.cachedFlashcards);
+      setIsFlashcardModalOpen(true);
+      toast.success("Flashcards carregados instantaneamente!");
+      return;
+    }
 
-    // Salva os cartões e abre o modal interativo
-    setFlashcards(cards);
-    setIsFlashcardModalOpen(true);
-  } catch (err) {
-    toast.error("Erro ao gerar flashcards.", { id: toastId });
-  } finally {
-    setIsAiLoading(false);
-  }
-};
+    // 🤖 2. SE NÃO ESTÁ NO CACHE, CHAMA O GEMINI
+    try {
+      toast.info("Gerando flashcards com IA...");
+
+      const generatedCards = await generateFlashcards(currentContent);
+
+      // 💾 3. SALVA OS CARDS E O TEXTO NO CACHE DA AULA
+      if (currentSubject?.id && selectedLessonId) {
+        saveLessonAICache(currentSubject.id, selectedLessonId, {
+          cachedFlashcards: generatedCards,
+          lastFlashcardContent: currentContent
+        });
+      }
+
+      setFlashcards(generatedCards);
+      setIsFlashcardModalOpen(true);
+
+    } catch (error) {
+      toast.error("Erro ao gerar flashcards pela IA.");
+      console.error(error);
+    }
+  };
 
 
   // Adicione o isAuthReady junto com seus outros estados
@@ -136,7 +173,7 @@ const handleGenerateFlashcards = async () => {
     addSemester, editSemester, deleteSemester, reorderSemesters,
     addSubject, editSubject, deleteSubject, reorderSubjects,
     addChapter, editChapter, deleteChapter, reorderChapters,
-    addLesson, editLesson, deleteLesson, reorderLessons, saveLessonContent
+    addLesson, editLesson, deleteLesson, reorderLessons, saveLessonContent, saveLessonAICache
   } = useNotebookStore();
 
   useEffect(() => {
