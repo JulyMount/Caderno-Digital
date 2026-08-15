@@ -320,7 +320,7 @@ const handleGenerateFlashcards = async () => {
 
   // DEMO LOGIN
   const handleGuestLogin = () => {
-    setUser({ name: 'Estudante Visitante', email: 'visitante@exemplo.com', picture: null });
+    setUser({ name: 'Estudante Visitante', isGuest: true }); // 👈 Tiramos o e-mail daqui!
     triggerConfetti();
     toast.success('Entrou como visitante!');
   };

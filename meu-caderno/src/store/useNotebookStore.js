@@ -53,14 +53,16 @@ export const useNotebookStore = create((set, get) => {
   const persistState = async (newCourses) => {
     const user = get().user;
 
-    // Salva no navegador usando o email como chave (ou 'guest' se não estiver logado)
-    const storageKey = user && user.email ? `user_notebook_courses_${user.email}` : 'user_notebook_courses_guest';
-    
-    // Agora salva no Dexie (sem o limite de 5MB do localStorage!)
+    // Se for usuário real com e-mail, salva com a chave dele. Se for visitante, salva na chave local 'guest'
+    const storageKey = user && user.email && !user.isGuest 
+      ? `user_notebook_courses_${user.email}` 
+      : 'user_notebook_courses_guest';
+
+    // 1. Salva SEMPRE no IndexedDB/Dexie do navegador local
     await dexieStorage.setItem(storageKey, JSON.stringify(newCourses));
 
-    // Salva no Firebase apenas se estiver logado
-    if (user && user.email) {
+    // 2. Salva no Firebase APENAS se tiver e-mail e NÃO for visitante
+    if (user && user.email && !user.isGuest) {
       const userDocRef = doc(db, 'users', user.email, 'data', 'notebook');
       setDoc(userDocRef, { courses: newCourses }, { merge: true }).catch(err => {
         console.error("Erro ao sincronizar com Firebase:", err);
@@ -76,45 +78,48 @@ export const useNotebookStore = create((set, get) => {
     selectedSubjectId: null,
     selectedLessonId: null,
 
-    setUser: (user) => {
-      // Remove ouvinte do usuário anterior
+    setUser: async (user) => {
+      // Cancela qualquer escuta do Firebase anterior
       if (unsubscribeFirestore) {
         unsubscribeFirestore();
         unsubscribeFirestore = null;
       }
 
-      // Limpa as seleções da tela
       set({ user, selectedCourseId: null, selectedSemesterId: null, selectedSubjectId: null, selectedLessonId: null });
 
-      if (user && user.email) {
-        // Tenta carregar os dados do navegador ESPECÍFICOS deste usuário para aparecer rápido na tela
-        const localCache = localStorage.getItem(`user_notebook_courses_${user.email}`);
-        if (localCache) {
-          set({ courses: JSON.parse(localCache) });
+      // Se for um usuário real (com e-mail e não sendo Guest)
+      if (user && user.email && !user.isGuest) {
+        // Tenta pegar do Dexie local
+        try {
+          const localCache = await dexieStorage.getItem(`user_notebook_courses_${user.email}`);
+          if (localCache) set({ courses: JSON.parse(localCache) });
+        } catch (err) {
+          console.error("Erro ao ler do Dexie:", err);
         }
 
-        // Conecta no Firebase daquele usuário específico
+        // Conecta ao Firebase
         const userDocRef = doc(db, 'users', user.email, 'data', 'notebook');
         unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data.courses) {
               set({ courses: data.courses });
-              localStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(data.courses));
+              dexieStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(data.courses));
             }
           } else {
-            // É UMA CONTA NOVA! Cria um caderno novinho para ela (usando o INITIAL_DATA)
             setDoc(userDocRef, { courses: INITIAL_DATA });
             set({ courses: INITIAL_DATA });
-            localStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(INITIAL_DATA));
+            dexieStorage.setItem(`user_notebook_courses_${user.email}`, JSON.stringify(INITIAL_DATA));
           }
-        }, (error) => {
-          console.error("Erro no ouvinte do Firestore:", error);
         });
       } else {
-        // SE FEZ LOGOUT: Volta para a tela de visitante sem misturar os dados
-        const guestCache = localStorage.getItem('user_notebook_courses_guest');
-        set({ courses: guestCache ? JSON.parse(guestCache) : INITIAL_DATA });
+        // Modo VISITANTE: Lê puramente do Dexie local deste computador
+        try {
+          const guestCache = await dexieStorage.getItem('user_notebook_courses_guest');
+          set({ courses: guestCache ? JSON.parse(guestCache) : INITIAL_DATA });
+        } catch (err) {
+          set({ courses: INITIAL_DATA });
+        }
       }
     },
 
