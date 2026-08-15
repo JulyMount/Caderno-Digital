@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Toaster, toast } from 'sonner';
 import confetti from 'canvas-confetti';
-import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
+//import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
+//import { jwtDecode } from 'jwt-decode';
 import html2pdf from 'html2pdf.js';
 import { generateSummary, generateFlashcards, improveFormatting } from './services/gemini';
 import { 
@@ -16,7 +16,7 @@ import {
 import { useNotebookStore } from './store/useNotebookStore';
 import LessonEditor from './Editor';
 
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from './firebase';
 
 import FlashcardModal from './FlashcardModal';
@@ -24,7 +24,7 @@ import FlashcardModal from './FlashcardModal';
 import SummaryModal from './SummaryModal';
 
 // 🔑 GOOGLE CLIENT ID
-const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
+//const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
 // MAPA COMPLETO DE ÍCONES
 const ICON_MAP = {
@@ -56,49 +56,51 @@ const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 const [summaryResult, setSummaryResult] = useState('');
 
 // 1. Gerar Resumo
-// 1. Gerar Resumo com o Gemini
-  const handleGenerateSummary = async () => {
-    const currentContent = getEditorText ? getEditorText() : "";
+const handleGenerateSummary = async () => {
+  // 1. CHECAGEM DE SEGURANÇA
+  if (!currentLesson?.content || currentLesson.content.trim() === '') {
+    toast.error('Escreva algum texto na aula antes de gerar o resumo.');
+    return;
+  }
 
-    if (!currentContent.trim()) {
-      toast.error("Escreva algo na aula antes de gerar um resumo.");
-      return;
-    }
+  // 🟢 2. CHECAGEM DE CACHE (A mágica acontece aqui)
+  // Se a aula atual já tem um resumo salvo na store/banco, abre direto!
+  if (currentLesson.summary) {
+    toast.info('Carregando resumo salvo...');
+    setSummaryText(currentLesson.summary);
+    setIsSummaryOpen(true);
+    return; // Interrompe para NÃO chamar o Gemini de novo
+  }
 
-    // ⚡ CHECAGEM DE CACHE:
-    if (
-      currentLesson?.cachedSummary && 
-      currentLesson?.lastSummarizedContent === currentContent
-    ) {
-      console.log("⚡ [CACHE] Resumo recuperado do banco sem gastar Gemini!");
-      setSummaryResult(currentLesson.cachedSummary);
-      setIsSummaryOpen(true);
-      toast.success("Resumo carregado instantaneamente!");
-      return;
-    }
+  // 3. VERIFICA COTA DA IA
+  if (!canGenerateAiContent()) {
+    toast.error('Você atingiu o limite mensal de geração da IA.');
+    return;
+  }
 
-    // 🤖 Se não está no cache, chama o Gemini
-    try {
-      toast.info("Gerando resumo com IA...");
+  // 🟡 4. TOAST DE CARREGAMENTO (Sonner)
+  const toastId = toast.loading('A IA está analisando sua aula e criando o resumo...');
 
-      const generatedSummary = await generateSummary(currentContent);
+  try {
+    // Chamada da API do Gemini
+    const text = await generateSummary(currentLesson.content);
 
-      // 💾 Salva no Cache da aula
-      if (currentSubject?.id && selectedLessonId) {
-        saveLessonAICache(currentSubject.id, selectedLessonId, {
-          cachedSummary: generatedSummary,
-          lastSummarizedContent: currentContent
-        });
-      }
+    // 🟢 5. SALVAR NO CACHE / BANCO
+    // Atualiza a aula na store salvando o resumo nela
+    saveLessonAICache(selectedSubjectId, selectedLessonId, { summary: text });
+    incrementAiUsage();
 
-      setSummaryText(generatedSummary);
-      setIsSummaryOpen(true);
+    setSummaryText(text);
+    setIsSummaryOpen(true);
 
-    } catch (error) {
-      toast.error("Erro ao gerar resumo pela IA.");
-      console.error(error);
-    }
-  };
+    // 🟢 6. TOAST DE SUCESSO
+    toast.success('Resumo gerado com sucesso!', { id: toastId });
+  } catch (err) {
+    console.error("Erro ao gerar resumo:", err);
+    // 🔴 7. TOAST DE ERRO
+    toast.error('Erro ao conectar com a IA. Tente novamente.', { id: toastId });
+  }
+};
 
   // 2. Inserir o Resumo no final da aula
   const handleInsertSummaryToNote = (summary) => {
@@ -118,49 +120,47 @@ const [summaryResult, setSummaryResult] = useState('');
 const [flashcards, setFlashcards] = useState([]);
 const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
 
-// 2. Gerar Flashcards
+// --- FUNÇÃO DE GERAR FLASHCARDS ---
 const handleGenerateFlashcards = async () => {
-    const currentContent = getEditorText ? getEditorText() : "";
+  if (!currentLesson?.content || currentLesson.content.trim() === '') {
+    toast.error('Escreva algum texto na aula para gerar flashcards.');
+    return;
+  }
 
-    if (!currentContent.trim()) {
-      toast.error("Escreva algo na aula antes de gerar os flashcards.");
-      return;
-    }
+  // 🟢 1. CHECAGEM DE CACHE
+  // Se já existirem flashcards salvos para esta aula, abre direto
+  if (currentLesson.flashcards && currentLesson.flashcards.length > 0) {
+    toast.info('Carregando flashcards salvos...');
+    setFlashcards(currentLesson.flashcards);
+    setIsFlashcardModalOpen(true);
+    return; // Não chama a IA novamente
+  }
 
-    // ⚡ 1. CHECAGEM DE CACHE (Se já existe e o texto não mudou)
-    if (
-      currentLesson?.cachedFlashcards && 
-      currentLesson?.lastFlashcardContent === currentContent
-    ) {
-      console.log("⚡ [CACHE] Flashcards recuperados do banco sem gastar Gemini!");
-      setFlashcards(currentLesson.cachedFlashcards);
-      setIsFlashcardModalOpen(true);
-      toast.success("Flashcards carregados instantaneamente!");
-      return;
-    }
+  if (!canGenerateAiContent()) {
+    toast.error('Você atingiu o limite mensal de geração da IA.');
+    return;
+  }
 
-    // 🤖 2. SE NÃO ESTÁ NO CACHE, CHAMA O GEMINI
-    try {
-      toast.info("Gerando flashcards com IA...");
+  // 🟡 2. TOAST DE CARREGAMENTO
+  const toastId = toast.loading('A IA está criando seus flashcards...');
 
-      const generatedCards = await generateFlashcards(currentContent);
+  try {
+    const generatedCards = await generateFlashcards(currentLesson.content);
 
-      // 💾 3. SALVA OS CARDS E O TEXTO NO CACHE DA AULA
-      if (currentSubject?.id && selectedLessonId) {
-        saveLessonAICache(currentSubject.id, selectedLessonId, {
-          cachedFlashcards: generatedCards,
-          lastFlashcardContent: currentContent
-        });
-      }
+    // 🟢 3. SALVAR NO CACHE / BANCO
+    saveLessonAICache(selectedSubjectId, selectedLessonId, { flashcards: generatedCards });
+    incrementAiUsage();
 
-      setFlashcards(generatedCards);
-      setIsFlashcardModalOpen(true);
+    setFlashcards(generatedCards);
+    setIsFlashcardModalOpen(true);
 
-    } catch (error) {
-      toast.error("Erro ao gerar flashcards pela IA.");
-      console.error(error);
-    }
-  };
+    // 🟢 4. TOAST DE SUCESSO
+    toast.success(`${generatedCards.length} flashcards criados!`, { id: toastId });
+  } catch (err) {
+    console.error("Erro ao gerar flashcards:", err);
+    toast.error('Erro ao gerar flashcards. Tente novamente.', { id: toastId });
+  }
+};
 
 
   // Adicione o isAuthReady junto com seus outros estados
@@ -173,7 +173,9 @@ const handleGenerateFlashcards = async () => {
     addSemester, editSemester, deleteSemester, reorderSemesters,
     addSubject, editSubject, deleteSubject, reorderSubjects,
     addChapter, editChapter, deleteChapter, reorderChapters,
-    addLesson, editLesson, deleteLesson, reorderLessons, saveLessonContent, saveLessonAICache
+    addLesson, editLesson, deleteLesson, reorderLessons, saveLessonContent, saveLessonAICache,
+    canGenerateAiContent,
+    incrementAiUsage
   } = useNotebookStore();
 
   useEffect(() => {
@@ -303,18 +305,19 @@ const handleGenerateFlashcards = async () => {
   }, [searchQuery, searchFilter, courses]);
 
   // LOGIN VIA GOOGLE
-  const handleGoogleSuccess = (credentialResponse) => {
+  // LOGIN VIA GOOGLE INTEGRADO COM FIREBASE AUTH
+  // LOGIN VIA GOOGLE (DIRETO PELO FIREBASE POPUP)
+  const handleGoogleLogin = async () => {
     try {
-      const decoded = jwtDecode(credentialResponse.credential);
-      setUser({
-        name: decoded.name,
-        email: decoded.email,
-        picture: decoded.picture
-      });
+      const provider = new GoogleAuthProvider();
+      // O próprio Firebase abre a janela e faz a autenticação
+      const result = await signInWithPopup(auth, provider);
+
       triggerConfetti();
-      toast.success(`Bem-vindo(a), ${decoded.given_name || decoded.name}!`);
+      toast.success(`Bem-vindo(a), ${result.user.displayName || 'Estudante'}!`);
     } catch (err) {
-      toast.error('Erro ao processar login do Google.');
+      console.error("Erro na autenticação Firebase com Google:", err);
+      toast.error('Erro ao conectar com o Firebase.');
     }
   };
 
@@ -423,7 +426,6 @@ const handleGenerateFlashcards = async () => {
 };
 
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="min-h-screen bg-slate-100 text-slate-800 font-sans p-4 md:p-8 relative">
         <Toaster position="bottom-right" richColors />
 
@@ -440,15 +442,17 @@ const handleGenerateFlashcards = async () => {
               </p>
 
               <div className="flex justify-center mb-4">
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={() => toast.error('Falha na autenticação com o Google.')}
-                  useOneTap
-                  shape="pill"
-                  size="large"
-                  text="signin_with"
-                  locale="pt-BR"
-                />
+                <button
+                  onClick={handleGoogleLogin}
+                  className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 px-4 rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow cursor-pointer"
+                >
+                  <img 
+                    src="https://www.svgrepo.com/show/475656/google-color.svg" 
+                    className="w-5 h-5" 
+                    alt="Google Logo" 
+                  />
+                  Fazer Login com o Google
+                </button>
               </div>
 
               <div className="relative my-6">
@@ -681,7 +685,7 @@ const handleGenerateFlashcards = async () => {
                             onDragStart={(e) => handleDragStart(e, index)}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleDrop(e, index, 'course')}
-                            onClick={() => setSelectedCourseId(course.id)}
+                            onClick={() => {setSelectedCourseId(course.id);window.history.pushState({ tela: 'interna' }, '');}}
                             onContextMenu={(e) => handleContextMenu(e, 'course', course)}
                             className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between group relative"
                           >
@@ -804,7 +808,7 @@ const handleGenerateFlashcards = async () => {
                               onDragStart={(e) => handleDragStart(e, index)}
                               onDragOver={(e) => e.preventDefault()}
                               onDrop={(e) => handleDrop(e, index, 'subject')}
-                              onClick={() => setSelectedSubjectId(sub.id)}
+                              onClick={() => {setSelectedSubjectId(sub.id);window.history.pushState({ tela: 'interna' }, '');}}
                               onContextMenu={(e) => handleContextMenu(e, 'subject', sub)}
                               className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all cursor-pointer flex flex-col justify-between min-h-[180px] group relative"
                             >
@@ -1420,6 +1424,5 @@ const handleGenerateFlashcards = async () => {
         onInsert={handleInsertSummaryToNote}
       />
       </div>
-    </GoogleOAuthProvider>
   );
 }

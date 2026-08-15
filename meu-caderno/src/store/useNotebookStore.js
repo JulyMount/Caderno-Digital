@@ -72,6 +72,12 @@ export const useNotebookStore = create((set, get) => {
 
   return {
     user: null,
+    plan: 'free',
+    aiUsage: {
+      month: new Date().toISOString().slice(0, 7),
+      summaryCount: 0,
+      flashcardCount: 0,
+    },
     courses: initialCourses,
     selectedCourseId: null,
     selectedSemesterId: null,
@@ -85,7 +91,19 @@ export const useNotebookStore = create((set, get) => {
         unsubscribeFirestore = null;
       }
 
-      set({ user, selectedCourseId: null, selectedSemesterId: null, selectedSubjectId: null, selectedLessonId: null });
+      set({ 
+      user, 
+      plan: user?.plan || 'free',
+      aiUsage: user?.aiUsage || {
+        month: new Date().toISOString().slice(0, 7),
+        summaryCount: 0,
+        flashcardCount: 0,
+      },
+      selectedCourseId: null, 
+      selectedSemesterId: null, 
+      selectedSubjectId: null, 
+      selectedLessonId: null 
+    });
 
       // Se for um usuário real (com e-mail e não sendo Guest)
       if (user && user.email && !user.isGuest) {
@@ -119,6 +137,63 @@ export const useNotebookStore = create((set, get) => {
           set({ courses: guestCache ? JSON.parse(guestCache) : INITIAL_DATA });
         } catch (err) {
           set({ courses: INITIAL_DATA });
+        }
+      }
+    },
+
+    // Checa se o usuário pode gerar conteúdo por IA
+    canGenerateAiContent: (type) => {
+      const { plan, aiUsage } = get();
+      
+      // Se for PRO, libera sem restrições
+      if (plan === 'pro') return { allowed: true };
+
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      
+      let currentUsage = { ...aiUsage };
+      if (currentUsage.month !== currentMonth) {
+        currentUsage = { month: currentMonth, summaryCount: 0, flashcardCount: 0 };
+      }
+
+      // Limites do Plano FREE
+      const LIMITS = {
+        summary: 10,
+        flashcard: 5,
+      };
+
+      const count = type === 'summary' ? (currentUsage.summaryCount || 0) : (currentUsage.flashcardCount || 0);
+      const limit = LIMITS[type];
+
+      if (count >= limit) {
+        return {
+          allowed: false,
+          reason: `Você atingiu o limite de ${limit} ${type === 'summary' ? 'resumos' : 'flashcards'} gratuitos deste mês. Assine o Plano PRO para ter uso ilimitado!`,
+        };
+      }
+
+      return { allowed: true };
+    },
+
+    // Incrementa o contador do usuário após usar a IA
+    incrementAiUsage: async (type) => {
+      const { aiUsage, user } = get();
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      
+      const updatedUsage = {
+        month: currentMonth,
+        summaryCount: type === 'summary' ? (aiUsage.summaryCount || 0) + 1 : (aiUsage.summaryCount || 0),
+        flashcardCount: type === 'flashcard' ? (aiUsage.flashcardCount || 0) + 1 : (aiUsage.flashcardCount || 0),
+      };
+
+      set({ aiUsage: updatedUsage });
+
+      // Se estiver logado, salva também no Firestore
+      if (user?.email && !user.isGuest) {
+        try {
+          const userRef = doc(db, 'users', user.email);
+          await setDoc(userRef, { aiUsage: updatedUsage }, { merge: true });
+        } catch (err) {
+          console.error("Erro ao atualizar uso de IA no Firebase:", err);
         }
       }
     },
