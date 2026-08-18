@@ -17,7 +17,8 @@ import { useNotebookStore } from './store/useNotebookStore';
 import LessonEditor from './Editor';
 
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 import FlashcardModal from './FlashcardModal';
 
@@ -45,6 +46,34 @@ const COLOR_OPTIONS = [
 export default function App() {
   // Estado para controlar o carregamento da IA
 const [isAiLoading, setIsAiLoading] = useState(false);
+
+const [isPro, setIsPro] = useState(false);
+
+useEffect(() => {
+  const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    if (!currentUser || currentUser.isAnonymous) {
+      setIsPro(false);
+      return;
+    }
+
+    // Busca o documento usando o e-mail do usuário (ou o UID como reserva)
+    const docId = currentUser.email || currentUser.uid;
+    const userRef = doc(db, 'users', docId);
+
+    const unsubscribeDoc = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setIsPro(data.isPro === true);
+      } else {
+        setIsPro(false);
+      }
+    });
+
+    return () => unsubscribeDoc();
+  });
+
+  return () => unsubscribeAuth();
+}, []);
 
 // Função para pegar todo o texto da aula atual no editor
 const getEditorText = () => {
@@ -541,12 +570,18 @@ const handleCheckout = async () => {
                     <Download className="w-4 h-4" /> Exportar PDF
                   </button>
 
-                  <button 
-                    onClick={handleCheckout}
-                    className="bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:opacity-90 transition"
-                  >
-                    ⚡ Seja Pro
-                  </button>
+                  {isPro ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 px-4 py-2 rounded-xl font-semibold shadow-sm">
+                      ✨ Plano Pro Ativo
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleCheckout}
+                      className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-xl font-medium shadow-md hover:opacity-90 transition-all"
+                    >
+                      ⚡ Seja Pro
+                    </button>
+                  )}
                 </div>
 
                 {/* Barra de Ferramentas com Inteligência Artificial */}
