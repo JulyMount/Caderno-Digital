@@ -67,7 +67,7 @@ const handleGenerateSummary = async () => {
   // Se a aula atual já tem um resumo salvo na store/banco, abre direto!
   if (currentLesson.summary) {
     toast.info('Carregando resumo salvo...');
-    setSummaryText(currentLesson.summary);
+    setSummaryResult(currentLesson.summary);
     setIsSummaryOpen(true);
     return; // Interrompe para NÃO chamar o Gemini de novo
   }
@@ -90,7 +90,7 @@ const handleGenerateSummary = async () => {
     saveLessonAICache(selectedSubjectId, selectedLessonId, { summary: text });
     incrementAiUsage();
 
-    setSummaryText(text);
+    setSummaryResult(text);
     setIsSummaryOpen(true);
 
     // 🟢 6. TOAST DE SUCESSO
