@@ -56,9 +56,9 @@ useEffect(() => {
       return;
     }
 
-    // Busca o documento usando o e-mail do usuário (ou o UID como reserva)
-    const docId = currentUser.email || currentUser.uid;
-    const userRef = doc(db, 'users', docId);
+    // Usa sempre o e-mail como ID do documento
+    const userDocId = currentUser.email || currentUser.uid;
+    const userRef = doc(db, 'users', userDocId);
 
     const unsubscribeDoc = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -215,8 +215,9 @@ const handleCheckout = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        userId: currentUser ? currentUser.uid : 'guest_' + Date.now(),
-        email: currentUser?.email || 'estudante@cadernodigital.com'
+        userId: currentUser?.email || currentUser?.uid, // Envia o e-mail para o webhook saber qual documento atualizar
+        email: currentUser?.email,
+        cpf: cpfFormatado
       })
     });
 
