@@ -18,7 +18,7 @@ export default async function handler(req, res) {
             title: 'Meu Caderno Digital - Plano Pro (30 dias)',
             quantity: 1,
             currency_id: 'BRL',
-            unit_price: 14.90
+            unit_price: 19.90
           }
         ],
         payer: {
