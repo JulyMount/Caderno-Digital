@@ -38,4 +38,13 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://caderno-digital-red.vercel.app', // A URL do seu site na Vercel
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })
