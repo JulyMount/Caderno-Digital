@@ -1,14 +1,22 @@
 import admin from 'firebase-admin';
 
-// Inicializa o Firebase Admin com a credencial de serviço
+// Trata a chave privada para evitar erros de formatação na Vercel
+const formattedPrivateKey = process.env.FIREBASE_PRIVATE_KEY
+  ? process.env.FIREBASE_PRIVATE_KEY.replace(/^"(.*)"$/, '$1').replace(/\\n/g, '\n')
+  : undefined;
+
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: "meu-caderno-digital-4a5f9",
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
-    }),
-  });
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: "meu-caderno-digital-4a5f9",
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: formattedPrivateKey,
+      }),
+    });
+  } catch (err) {
+    console.error('Erro na inicialização do Firebase Admin:', err);
+  }
 }
 
 const db = admin.firestore();
