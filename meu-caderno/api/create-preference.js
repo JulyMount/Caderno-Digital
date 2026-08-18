@@ -36,6 +36,7 @@ export default async function handler(req, res) {
         ],
         payer: payerData,
         external_reference: userId || 'teste_user',
+        notification_url: 'https://caderno-digital-red.vercel.app/api/webhook',
         back_urls: {
           success: 'https://caderno-digital-red.vercel.app/?status=success',
           failure: 'https://caderno-digital-red.vercel.app/?status=failure',

@@ -1,3 +1,19 @@
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, doc, updateDoc, setDoc } from 'firebase/firestore';
+
+// Configuração do Firebase
+const firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: "meu-caderno-digital-4a5f9.firebaseapp.com",
+  projectId: "meu-caderno-digital-4a5f9",
+  storageBucket: "meu-caderno-digital-4a5f9.appspot.com",
+  messagingSenderId: "338874136979",
+  appId: "1:338874136979:web:a62b80f9ef468c6a0cb398"
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const db = getFirestore(app);
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
@@ -7,7 +23,6 @@ export default async function handler(req, res) {
     const { type, data } = req.body;
 
     if (type === 'payment' && data?.id) {
-      // 1. Busca os detalhes do pagamento no Mercado Pago
       const paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${data.id}`, {
         headers: {
           'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
@@ -16,12 +31,15 @@ export default async function handler(req, res) {
 
       const payment = await paymentResponse.json();
 
-      // 2. Se aprovado, extrai o ID do usuário que enviamos na criação
       if (payment.status === 'approved') {
         const userId = payment.external_reference;
         console.log(`✅ Pagamento aprovado para o usuário ID: ${userId}`);
 
-        // O evento foi recebido e processado com sucesso
+        if (userId) {
+          const userRef = doc(db, 'users', userId);
+          await setDoc(userRef, { isPro: true }, { merge: true });
+          console.log(`🚀 Usuário ${userId} promovido a PRO com sucesso no Firestore!`);
+        }
       }
     }
 
