@@ -23,6 +23,19 @@ import FlashcardModal from './FlashcardModal';
 
 import SummaryModal from './SummaryModal';
 
+useEffect(() => {
+  const queryParams = new URLSearchParams(window.location.search);
+  const status = queryParams.get('status');
+
+  if (status === 'success') {
+    toast.success('🎉 Pagamento aprovado! Seu acesso Pro foi liberado.');
+    // Limpa o parâmetro da URL para não reenviar o toast no refresh
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (status === 'failure') {
+    toast.error('O pagamento não foi concluído. Tente novamente.');
+  }
+}, []);
+
 // 🔑 GOOGLE CLIENT ID
 //const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
@@ -159,6 +172,36 @@ const handleGenerateFlashcards = async () => {
   } catch (err) {
     console.error("Erro ao gerar flashcards:", err);
     toast.error('Erro ao gerar flashcards. Tente novamente.', { id: toastId });
+  }
+};
+
+const handleCheckout = async () => {
+  try {
+    toast.info('Redirecionando para o pagamento...');
+
+    // Pega o usuário logado atualmente no Firebase
+    const currentUser = auth.currentUser;
+
+    const response = await fetch('/api/create-preference', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser ? currentUser.uid : 'guest_' + Date.now(),
+        email: currentUser?.email || 'estudante@cadernodigital.com'
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.init_point) {
+      // Redireciona para o checkout do Mercado Pago
+      window.location.href = data.init_point; 
+    } else {
+      toast.error('Erro ao gerar o link de pagamento.');
+    }
+  } catch (error) {
+    console.error(error);
+    toast.error('Falha na comunicação com o servidor.');
   }
 };
 
@@ -496,6 +539,13 @@ const handleGenerateFlashcards = async () => {
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" /> Exportar PDF
+                  </button>
+
+                  <button 
+                    onClick={handleCheckout}
+                    className="bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:opacity-90 transition"
+                  >
+                    ⚡ Seja Pro
                   </button>
                 </div>
 
