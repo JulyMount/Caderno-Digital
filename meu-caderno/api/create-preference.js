@@ -4,7 +4,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Tratamento para evitar que a API trave se req.body vier vazio ou em string
     const bodyData = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { userId, email, cpf } = bodyData;
 
@@ -38,35 +37,13 @@ export default async function handler(req, res) {
         external_reference: userId || 'teste_user',
         notification_url: 'https://caderno-digital-red.vercel.app/api/webhook',
         back_urls: {
-          success: 'https://caderno-digital-red.vercel.app/?status=success',
-          failure: 'https://caderno-digital-red.vercel.app/?status=failure',
-          pending: 'https://caderno-digital-red.vercel.app/?status=pending'
+          success: 'https://caderno-digital-red.vercel.app/',
+          failure: 'https://caderno-digital-red.vercel.app/',
+          pending: 'https://caderno-digital-red.vercel.app/'
         },
         auto_return: 'approved'
       })
     });
-
-    const preferenceData = {
-        items: [
-            {
-            title: 'Plano PRO - Caderno Digital',
-            unit_price: 1.00, // Ou o valor do seu plano
-            quantity: 1,
-            currency_id: 'BRL',
-            },
-        ],
-        external_reference: userId, // O ID/e-mail do usuário no Firebase
-        
-        // 1. Define para onde o usuário vai ao concluir
-        back_urls: {
-            success: 'https://caderno-digital-red.vercel.app/?status=approved',
-            pending: 'https://caderno-digital-red.vercel.app/?status=pending',
-            failure: 'https://caderno-digital-red.vercel.app/?status=failure',
-        },
-        
-        // 2. FORÇA O REDIRECIONAMENTO AUTOMÁTICO assim que o Pix for aprovado
-        auto_return: 'approved',
-        };
 
     const data = await response.json();
 
