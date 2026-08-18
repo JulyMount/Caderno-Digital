@@ -75,6 +75,26 @@ useEffect(() => {
   return () => unsubscribeAuth();
 }, []);
 
+// ... dentro do seu componente App():
+useEffect(() => {
+  // Captura os parâmetros passados pelo Mercado Pago na URL
+  const queryParams = new URLSearchParams(window.location.search);
+  const status = queryParams.get('status') || queryParams.get('collection_status');
+
+  if (status) {
+    if (status === 'approved') {
+      alert('🎉 Parabéns! Seu pagamento foi confirmado e sua conta PRO já está ativa!');
+    } else if (status === 'pending') {
+      alert('⏳ Seu pagamento está em processamento. Assim que for aprovado, sua conta PRO será liberada!');
+    } else if (status === 'failure' || status === 'rejected') {
+      alert('❌ O pagamento não foi concluído. Tente novamente ou escolha outra forma de pagamento.');
+    }
+
+    // Limpa os parâmetros da URL sem recarregar a página
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}, []);
+
 // Função para pegar todo o texto da aula atual no editor
 const getEditorText = () => {
   const editorEl = document.querySelector('.bn-editor') || document.querySelector('.blocknote-editor');
