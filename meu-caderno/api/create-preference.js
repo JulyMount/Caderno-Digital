@@ -22,8 +22,7 @@ export default async function handler(req, res) {
           }
         ],
         payer: {
-          //email: email || 'usuario@exemplo.com'
-          email: 'comprador@email.com'
+          email: email || 'usuario@exemplo.com'
         },
         external_reference: userId, // Grava o ID do seu usuário para sabermos quem pagou
         back_urls: {
