@@ -3,9 +3,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
-  const { userId, email } = req.body;
+  const { userId, email, cpf } = req.body;
 
   try {
+    // Monta o objeto payer básico com e-mail
+    const payerData = {
+      email: email || 'comprador@exemplo.com',
+    };
+
+    // Se o CPF for enviado, adiciona a identificação necessária para liberar o Pix sem conta
+    if (cpf) {
+      payerData.identification = {
+        type: 'CPF',
+        number: 'cpf.replace(/\D/g, '')' // Remove pontos e hífens, deixando apenas números
+      };
+    }
+
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: {
@@ -18,13 +31,11 @@ export default async function handler(req, res) {
             title: 'Meu Caderno Digital - Plano Pro (30 dias)',
             quantity: 1,
             currency_id: 'BRL',
-            unit_price: 1.00
+            unit_price: 1.00 // Valor de R$ 1,00 para o teste de ponta a ponta
           }
         ],
-        payer: {
-          email: email || 'usuario@exemplo.com'
-        },
-        external_reference: userId, // Grava o ID do seu usuário para sabermos quem pagou
+        payer: payerData,
+        external_reference: userId, // Grava o ID do usuário para sabermos quem pagou no Webhook
         back_urls: {
           success: 'https://caderno-digital-red.vercel.app/?status=success',
           failure: 'https://caderno-digital-red.vercel.app/?status=failure',
@@ -37,10 +48,11 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('Resposta de erro do Mercado Pago:', data);
       throw new Error(data.message || 'Erro ao comunicar com Mercado Pago');
     }
 
-    // Retorna o link de checkout (sandbox_init_point para testes ou init_point para produção)
+    // Retorna o link oficial de produção e o de sandbox
     return res.status(200).json({ 
       init_point: data.init_point, 
       sandbox_init_point: data.sandbox_init_point 

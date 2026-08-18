@@ -195,7 +195,7 @@ const handleCheckout = async () => {
 
     if (data.init_point) {
       // Redireciona para o checkout do Mercado Pago
-      window.location.href = data.init_point; 
+      window.location.href = data.init_point;
     } else {
       toast.error('Erro ao gerar o link de pagamento.');
     }
