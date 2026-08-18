@@ -206,32 +206,28 @@ const handleGenerateFlashcards = async () => {
 
 const handleCheckout = async () => {
   try {
-    toast.info('Redirecionando para o pagamento...');
-
-    // Pega o usuário logado atualmente no Firebase
     const currentUser = auth.currentUser;
+    if (!currentUser) return;
 
+    // Envia o e-mail como ID do documento para manter o padrão das suas anotações
     const response = await fetch('/api/create-preference', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        userId: currentUser?.email || currentUser?.uid, // Envia o e-mail para o webhook saber qual documento atualizar
-        email: currentUser?.email,
-        cpf: cpfFormatado
+        userId: currentUser.email || currentUser.uid,
+        email: currentUser.email
       })
     });
 
     const data = await response.json();
 
     if (data.init_point) {
-      // Redireciona para o checkout do Mercado Pago
       window.location.href = data.init_point;
     } else {
-      toast.error('Erro ao gerar o link de pagamento.');
+      console.error('Erro no checkout:', data);
     }
   } catch (error) {
-    console.error(error);
-    toast.error('Falha na comunicação com o servidor.');
+    console.error('Erro ao conectar com servidor:', error);
   }
 };
 
