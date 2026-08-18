@@ -46,6 +46,28 @@ export default async function handler(req, res) {
       })
     });
 
+    const preferenceData = {
+        items: [
+            {
+            title: 'Plano PRO - Caderno Digital',
+            unit_price: 1.00, // Ou o valor do seu plano
+            quantity: 1,
+            currency_id: 'BRL',
+            },
+        ],
+        external_reference: userId, // O ID/e-mail do usuário no Firebase
+        
+        // 1. Define para onde o usuário vai ao concluir
+        back_urls: {
+            success: 'https://caderno-digital-red.vercel.app/?status=approved',
+            pending: 'https://caderno-digital-red.vercel.app/?status=pending',
+            failure: 'https://caderno-digital-red.vercel.app/?status=failure',
+        },
+        
+        // 2. FORÇA O REDIRECIONAMENTO AUTOMÁTICO assim que o Pix for aprovado
+        auto_return: 'approved',
+        };
+
     const data = await response.json();
 
     if (!response.ok) {
