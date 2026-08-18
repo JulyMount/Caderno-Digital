@@ -6,9 +6,8 @@ export default async function handler(req, res) {
   try {
     const { type, data } = req.body;
 
-    // O Mercado Pago avisa quando o status de um pagamento é alterado
     if (type === 'payment' && data?.id) {
-      // 1. Consulta os detalhes do pagamento na API do Mercado Pago
+      // 1. Busca os detalhes do pagamento no Mercado Pago
       const paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${data.id}`, {
         headers: {
           'Authorization': `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
@@ -17,18 +16,18 @@ export default async function handler(req, res) {
 
       const payment = await paymentResponse.json();
 
-      // 2. Se o pagamento foi aprovado
+      // 2. Se aprovado, extrai o ID do usuário que enviamos na criação
       if (payment.status === 'approved') {
-        const userId = payment.external_reference; // O ID do usuário que enviamos no checkout
-        console.log(`✅ Pagamento aprovado com sucesso para o usuário: ${userId}`);
+        const userId = payment.external_reference;
+        console.log(`✅ Pagamento aprovado para o usuário ID: ${userId}`);
 
-        // O evento foi processado com sucesso
+        // O evento foi recebido e processado com sucesso
       }
     }
 
     return res.status(200).send('OK');
   } catch (error) {
-    console.error('Erro ao processar Webhook:', error);
+    console.error('Erro no Webhook:', error);
     return res.status(500).send('Webhook Error');
   }
 }
