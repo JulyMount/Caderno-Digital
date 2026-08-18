@@ -1,25 +1,30 @@
-import admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-// Trata a chave privada para evitar erros de formatação na Vercel
-const formattedPrivateKey = process.env.FIREBASE_PRIVATE_KEY
-  ? process.env.FIREBASE_PRIVATE_KEY.replace(/^"(.*)"$/, '$1').replace(/\\n/g, '\n')
-  : undefined;
+// Inicialização segura do Firebase Admin
+function getAdminDb() {
+  if (getApps().length === 0) {
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    if (!clientEmail || !privateKey) {
+      console.error('❌ ERRO: FIREBASE_CLIENT_EMAIL ou FIREBASE_PRIVATE_KEY não foram encontradas na Vercel!');
+      return null;
+    }
+
+    // Trata quebras de linha e aspas extras
+    privateKey = privateKey.replace(/^"(.*)"$/, '$1').replace(/\\n/g, '\n');
+
+    initializeApp({
+      credential: cert({
         projectId: "meu-caderno-digital-4a5f9",
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: formattedPrivateKey,
+        clientEmail: clientEmail,
+        privateKey: privateKey,
       }),
     });
-  } catch (err) {
-    console.error('Erro na inicialização do Firebase Admin:', err);
   }
+  return getFirestore();
 }
-
-const db = admin.firestore();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -27,6 +32,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    const db = getAdminDb();
+
+    if (!db) {
+      return res.status(500).json({ error: 'Configuração do Firebase Admin pendente na Vercel.' });
+    }
+
     const { type, data } = req.body;
 
     if (type === 'payment' && data?.id) {
