@@ -1,18 +1,17 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, updateDoc, setDoc } from 'firebase/firestore';
+import admin from 'firebase-admin';
 
-// Configuração do Firebase
-const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: "meu-caderno-digital-4a5f9.firebaseapp.com",
-  projectId: "meu-caderno-digital-4a5f9",
-  storageBucket: "meu-caderno-digital-4a5f9.appspot.com",
-  messagingSenderId: "338874136979",
-  appId: "1:338874136979:web:a62b80f9ef468c6a0cb398"
-};
+// Inicializa o Firebase Admin com a credencial de serviço
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: "meu-caderno-digital-4a5f9",
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    }),
+  });
+}
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const db = getFirestore(app);
+const db = admin.firestore();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -36,8 +35,8 @@ export default async function handler(req, res) {
         console.log(`✅ Pagamento aprovado para o usuário ID: ${userId}`);
 
         if (userId) {
-          const userRef = doc(db, 'users', userId);
-          await setDoc(userRef, { isPro: true }, { merge: true });
+          const userRef = db.collection('users').doc(userId);
+          await userRef.set({ isPro: true }, { merge: true });
           console.log(`🚀 Usuário ${userId} promovido a PRO com sucesso no Firestore!`);
         }
       }
