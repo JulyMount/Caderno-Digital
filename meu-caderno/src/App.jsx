@@ -23,19 +23,6 @@ import FlashcardModal from './FlashcardModal';
 
 import SummaryModal from './SummaryModal';
 
-useEffect(() => {
-  const queryParams = new URLSearchParams(window.location.search);
-  const status = queryParams.get('status');
-
-  if (status === 'success') {
-    toast.success('🎉 Pagamento aprovado! Seu acesso Pro foi liberado.');
-    // Limpa o parâmetro da URL para não reenviar o toast no refresh
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } else if (status === 'failure') {
-    toast.error('O pagamento não foi concluído. Tente novamente.');
-  }
-}, []);
-
 // 🔑 GOOGLE CLIENT ID
 //const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
@@ -67,6 +54,19 @@ const getEditorText = () => {
 
 const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 const [summaryResult, setSummaryResult] = useState('');
+
+useEffect(() => {
+  const queryParams = new URLSearchParams(window.location.search);
+  const status = queryParams.get('status');
+
+  if (status === 'success') {
+    toast.success('🎉 Pagamento aprovado! Seu acesso Pro foi liberado.');
+    // Limpa o parâmetro da URL para não reenviar o toast no refresh
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (status === 'failure') {
+    toast.error('O pagamento não foi concluído. Tente novamente.');
+  }
+}, []);
 
 // 1. Gerar Resumo
 const handleGenerateSummary = async () => {
