@@ -41,6 +41,30 @@ export default function CheckoutModal({ isOpen, onClose, user }) {
     }
   };
 
+  // Adicione este useEffect dentro do seu CheckoutModal:
+useEffect(() => {
+  let interval;
+
+  if (pixData?.paymentId) {
+    interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/check-payment?paymentId=${pixData.paymentId}&userId=${user?.uid || user?.email}`);
+        const data = await res.json();
+
+        if (data.status === 'approved') {
+          clearInterval(interval);
+          toast.success('Pagamento confirmado! Bem-vindo ao Pro 🚀');
+          onClose(); // Fecha o modal automaticamente
+        }
+      } catch (err) {
+        console.error('Erro ao verificar pagamento:', err);
+      }
+    }, 3000); // Consulta a cada 3 segundos
+  }
+
+  return () => clearInterval(interval);
+}, [pixData, user, onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 relative">
