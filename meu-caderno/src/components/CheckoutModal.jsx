@@ -7,13 +7,11 @@ export default function CheckoutModal({ isOpen, onClose, user }) {
   const [pixData, setPixData] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  if (!isOpen) return null;
-
-  // Polling: consulta o status do pagamento no Mercado Pago a cada 3 segundos
+  // Polling em tempo real (sempre declarado no topo do componente)
   useEffect(() => {
     let interval;
 
-    if (pixData?.paymentId) {
+    if (isOpen && pixData?.paymentId) {
       interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/check-payment?paymentId=${pixData.paymentId}&userId=${user?.uid || user?.email}`);
@@ -31,7 +29,10 @@ export default function CheckoutModal({ isOpen, onClose, user }) {
     }
 
     return () => clearInterval(interval);
-  }, [pixData, user, onClose]);
+  }, [isOpen, pixData, user, onClose]);
+
+  // Se o modal estiver fechado, interrompe a renderização apenas AQUI (depois de registrar os Hooks)
+  if (!isOpen) return null;
 
   const handleGeneratePix = async () => {
     setLoading(true);
