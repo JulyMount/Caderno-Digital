@@ -7,6 +7,11 @@ export default async function handler(req, res) {
     const bodyData = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { userId, email, cpf } = bodyData;
 
+    // Detecta se o site está rodando no Preview da Vercel ou na Produção
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers.host;
+    const currentUrl = `${protocol}://${host}`;
+
     const payerData = {
       email: email || 'comprador@exemplo.com',
     };
@@ -35,11 +40,11 @@ export default async function handler(req, res) {
         ],
         payer: payerData,
         external_reference: userId || 'teste_user',
-        notification_url: 'https://caderno-digital-red.vercel.app/api/webhook',
+        notification_url: `${currentUrl}/api/webhook`, // 👈 Aponta para o Preview se estiver em testes!
         back_urls: {
-          success: 'https://caderno-digital-red.vercel.app/',
-          failure: 'https://caderno-digital-red.vercel.app/',
-          pending: 'https://caderno-digital-red.vercel.app/'
+          success: `${currentUrl}/`,
+          failure: `${currentUrl}/`,
+          pending: `${currentUrl}/`
         },
         auto_return: 'approved'
       })
