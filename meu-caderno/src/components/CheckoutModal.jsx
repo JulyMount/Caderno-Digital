@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 export default function CheckoutModal({ isOpen, onClose, user }) {
@@ -8,6 +8,30 @@ export default function CheckoutModal({ isOpen, onClose, user }) {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
+
+  // Polling: consulta o status do pagamento no Mercado Pago a cada 3 segundos
+  useEffect(() => {
+    let interval;
+
+    if (pixData?.paymentId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/check-payment?paymentId=${pixData.paymentId}&userId=${user?.uid || user?.email}`);
+          const data = await res.json();
+
+          if (data.status === 'approved') {
+            clearInterval(interval);
+            toast.success('Pagamento confirmado! Bem-vindo ao Pro 🚀');
+            onClose();
+          }
+        } catch (err) {
+          console.error('Erro ao verificar pagamento:', err);
+        }
+      }, 3000);
+    }
+
+    return () => clearInterval(interval);
+  }, [pixData, user, onClose]);
 
   const handleGeneratePix = async () => {
     setLoading(true);
@@ -40,30 +64,6 @@ export default function CheckoutModal({ isOpen, onClose, user }) {
       setTimeout(() => setCopied(false), 3000);
     }
   };
-
-  // Adicione este useEffect dentro do seu CheckoutModal:
-useEffect(() => {
-  let interval;
-
-  if (pixData?.paymentId) {
-    interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/check-payment?paymentId=${pixData.paymentId}&userId=${user?.uid || user?.email}`);
-        const data = await res.json();
-
-        if (data.status === 'approved') {
-          clearInterval(interval);
-          toast.success('Pagamento confirmado! Bem-vindo ao Pro 🚀');
-          onClose(); // Fecha o modal automaticamente
-        }
-      } catch (err) {
-        console.error('Erro ao verificar pagamento:', err);
-      }
-    }, 3000); // Consulta a cada 3 segundos
-  }
-
-  return () => clearInterval(interval);
-}, [pixData, user, onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
