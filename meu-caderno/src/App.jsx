@@ -24,6 +24,8 @@ import FlashcardModal from './FlashcardModal';
 
 import SummaryModal from './SummaryModal';
 
+import CheckoutModal from './components/CheckoutModal';
+
 // 🔑 GOOGLE CLIENT ID
 //const GOOGLE_CLIENT_ID = "690818417195-c7an4mk5p00agpgd0netav9e9mavh2dc.apps.googleusercontent.com";
 
@@ -48,6 +50,8 @@ export default function App() {
 const [isAiLoading, setIsAiLoading] = useState(false);
 
 const [isPro, setIsPro] = useState(false);
+
+const [isModalOpen, setIsModalOpen] = useState(false);
 
 useEffect(() => {
   const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -94,6 +98,13 @@ useEffect(() => {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 }, []);
+
+// Fecha o modal do Pix assim que a conta for atualizada para PRO no banco de dados
+useEffect(() => {
+  if (isPro) {
+    setIsModalOpen(false);
+  }
+}, [isPro]);
 
 // Função para pegar todo o texto da aula atual no editor
 const getEditorText = () => {
@@ -593,7 +604,7 @@ const handleCheckout = async () => {
                     </div>
                   ) : (
                     <button
-                      onClick={handleCheckout}
+                      onClick={() => setIsModalOpen(true)}
                       className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-xl font-medium shadow-md hover:opacity-90 transition-all"
                     >
                       ⚡ Seja Pro
@@ -1524,6 +1535,11 @@ const handleCheckout = async () => {
         onClose={() => setIsSummaryOpen(false)}
         summaryText={summaryResult}
         onInsert={handleInsertSummaryToNote}
+      />
+      <CheckoutModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        user={user} 
       />
       </div>
   );
